@@ -796,32 +796,6 @@ struct XdlopsGemm_t
         return p_c_thread;
     }
 
-    __device__ static MatrixIndex GetBeginOfThreadBlk(index_t i)
-    {
-        const index_t xdlops_i = i / GetNumBlksPerXdlops();
-        const index_t j        = i % GetNumBlksPerXdlops();
-
-        const index_t m_i = xdlops_i / NRepeats;
-        const index_t n_i = xdlops_i % NRepeats;
-
-        const index_t laneId = get_thread_local_1d_id() % mfma_type.wave_size;
-        const index_t blk_id = laneId / mfma_type.num_threads_blk;
-        const index_t blk_td = laneId % mfma_type.num_threads_blk;
-
-        index_t col_blk = j % mfma_type.num_output_blks;
-        index_t row_blk = j / mfma_type.num_output_blks;
-
-        static_if<!IsABroadcast>{}([&](auto) {
-            col_blk = j / mfma_type.num_output_blks;
-            row_blk = j % mfma_type.num_output_blks;
-        });
-
-        index_t col = col_blk * mfma_type.n + blk_td + n_i * NPerXdlops;
-        index_t row = row_blk * mfma_type.m + blk_id * mfma_type.group_size + m_i * MPerXdlops;
-
-        return MatrixIndex{row, col};
-    }
-
     __device__ void SetZeroXdlopsRegs() const {}
 
     template <class FloatC>
@@ -1042,12 +1016,57 @@ struct XdlopsGemm_t
 
     static constexpr auto mfma_type = GetXdlopsInfo().mfma_type;
 
+    __device__ static constexpr index_t GetNumXdlops()
+    {
+        return (MPerXdlops * NPerXdlops) / (mfma_type.m * mfma_type.n * mfma_type.num_output_blks);
+    }
+
     struct OutputLayout
     {
+        __device__ static constexpr index_t M3() { return GetNumXdlops(); }
+        __device__ static constexpr index_t M2() { return mfma_type.num_output_blks; }
         __device__ static constexpr index_t M1() { return mfma_type.num_groups_blk; }
         __device__ static constexpr index_t M0() { return mfma_type.group_size; }
-        __device__ static constexpr index_t N1() { return mfma_type.num_input_blks; }
+        __device__ static constexpr index_t N1() { return mfma_type.num_output_blks; }
         __device__ static constexpr index_t N0() { return mfma_type.num_threads_blk; }
+
+        __device__ static constexpr auto GetMfmaType() { return mfma_type; }
+
+        __device__ static MatrixIndex GetBeginOfThreadBlk(index_t i)
+        {
+            const index_t xdlops_i = i / GetNumBlksPerXdlops();
+            const index_t j        = i % GetNumBlksPerXdlops();
+
+            const index_t m_i = xdlops_i / NRepeats;
+            const index_t n_i = xdlops_i % NRepeats;
+
+            const index_t laneId            = get_thread_local_1d_id() % mfma_type.wave_size;
+            const index_t blk_id            = laneId / mfma_type.num_threads_blk;
+            const index_t blk_td            = laneId % mfma_type.num_threads_blk;
+            const index_t thread_group_size = mfma_type.num_threads_blk / mfma_type.group_size;
+            const index_t thread_group_id   = blk_td / thread_group_size;
+            const index_t thread_group_td   = blk_td % thread_group_size;
+
+            index_t col_blk = j % mfma_type.num_output_blks;
+            index_t row_blk = j / mfma_type.num_output_blks;
+
+            static_if<!IsABroadcast>{}([&](auto) {
+                col_blk = j / mfma_type.num_output_blks;
+                row_blk = j % mfma_type.num_output_blks;
+            });
+
+            index_t col =
+                n_i * NPerXdlops + col_blk * mfma_type.n + thread_group_td * mfma_type.group_size;
+            index_t row = m_i * MPerXdlops + row_blk * mfma_type.m + blk_id * mfma_type.group_size +
+                          thread_group_id;
+
+            return MatrixIndex{row, col};
+        }
+
+        __device__ static constexpr auto CreateOutputVecZero()
+        {
+            return GetXdlopsInfo().OutputVecType.CreateVecZero();
+        }
 
         __device__ static constexpr index_t GetBlkSize() { return mfma_type.num_regs_blk; }
 
@@ -1056,9 +1075,56 @@ struct XdlopsGemm_t
             return GetNumBlksPerXdlops() * MRepeats * NRepeats;
         }
 
-        __device__ static constexpr auto CreateOutputVecZero()
+        template <class AccFloat>
+        __device__ static constexpr index_t GetShflBuffSize()
         {
-            return GetXdlopsInfo().OutputVecType.CreateVecZero();
+            return mfma_type.wave_size * sizeof(AccFloat) * mfma_type.group_size;
+        }
+
+        template <class AccFloat, class CFloat>
+        __device__ CFloat OutputShfl(AccFloat* lds_buff, CFloat p_c_thread)
+        {
+            const index_t thread_id = get_thread_local_1d_id();
+            const index_t wave_id   = thread_id / mfma_type.wave_size;
+            const index_t lane_id   = thread_id % mfma_type.wave_size;
+            const index_t blk_id    = lane_id / mfma_type.num_threads_blk;
+            const index_t blk_td    = lane_id % mfma_type.num_threads_blk;
+
+            auto blk_shfl_buff =
+                lds_buff +
+                (wave_id * mfma_type.wave_size + blk_id * mfma_type.num_threads_blk) *
+                    mfma_type.group_size;
+
+            auto reg_c = p_c_thread.n;
+
+#pragma unroll
+            for(index_t i = 0; i < GetNumBlks(); ++i)
+            {
+#pragma unroll
+                for(index_t j = 0; j < mfma_type.num_groups_blk; ++j)
+                {
+                    index_t reg_group_off =
+                        (i * mfma_type.num_groups_blk + j) * mfma_type.group_size;
+
+                    // store to lds
+                    for(index_t k = 0; k < mfma_type.group_size; k++)
+                        blk_shfl_buff[blk_td + k * mfma_type.num_threads_blk] =
+                            reg_c[reg_group_off + k];
+
+// load from lds
+#if 1
+                    auto blk_shfl_buff_vec =
+                        reinterpret_cast<float4_t*>(blk_shfl_buff + blk_td * mfma_type.group_size);
+                    auto reg_c_vec = reinterpret_cast<float4_t*>(reg_c + reg_group_off);
+                    reg_c_vec[0]   = blk_shfl_buff_vec[0];
+#else
+                    for(index_t k                = 0; k < mfma_type.group_size; k++)
+                        reg_c[reg_group_off + k] = blk_shfl_buff[blk_td * mfma_type.group_size + k];
+#endif
+                }
+            }
+
+            return p_c_thread;
         }
     };
 

@@ -55,7 +55,6 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
     static constexpr index_t WaveSize = 64;
 
     __device__ constexpr auto GetOutputLayout() const { return XdlopsGemm.GetOutputLayout(); }
-
 #if CK_WORKAROUND_SWDEV_241664
     template <index_t MRepeats_ = MRepeats, index_t NRepeats_ = NRepeats>
     __device__ constexpr auto CreateOutputVecZero() const;
@@ -139,6 +138,14 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
 
             return p_c_thread;
         }
+
+        template <class AccFloat, class FloatC>
+        __device__ static FloatC OutputShfl(AccFloat* lds_buff, FloatC p_c_thread)
+        {
+            p_c_thread.s.x.l = XdlopsGemm.GetOutputLayout().OutputShfl(lds_buff, p_c_thread.s.x.l);
+            p_c_thread.s.y.l = XdlopsGemm.GetOutputLayout().OutputShfl(lds_buff, p_c_thread.s.y.l);
+            return p_c_thread;
+        }
     };
 
     template <>
@@ -156,6 +163,14 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
 
             return p_c_thread;
         }
+
+        template <class AccFloat, class FloatC>
+        __device__ static FloatC OutputShfl(AccFloat* lds_buff, FloatC p_c_thread)
+        {
+            p_c_thread.s.x.l = XdlopsGemm.GetOutputLayout().OutputShfl(lds_buff, p_c_thread.s.x.l);
+            p_c_thread.s.y.l = XdlopsGemm.GetOutputLayout().OutputShfl(lds_buff, p_c_thread.s.y.l);
+            return p_c_thread;
+        }
     };
 
     template <>
@@ -167,6 +182,13 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
                                      FloatC p_c_thread)
         {
             return XdlopsGemm.template Run<M, N, K>(p_a_block, p_b_block, p_c_thread);
+        }
+
+        template <class AccFloat, class FloatC>
+        __device__ static FloatC OutputShfl(AccFloat* lds_buff, FloatC p_c_thread)
+        {
+            p_c_thread = XdlopsGemm.GetOutputLayout().OutputShfl(lds_buff, p_c_thread);
+            return p_c_thread;
         }
     };
 #endif
@@ -190,6 +212,12 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
 #endif
     }
 
+    template <class AccFloat, class FloatC>
+    __device__ constexpr auto OutputShfl(AccFloat* lds_buff, FloatC p_c_thread) const
+    {
+        return WithMNRepeats<MRepeats, NRepeats>::OutputShfl(lds_buff, p_c_thread);
+    }
+
     __device__ static MatrixIndex GetBeginOfThreadMatrixC(index_t i)
     {
 
@@ -202,7 +230,7 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
         const index_t m = xdlops_i / NRepeats;
         const index_t n = xdlops_i % NRepeats;
 
-        const auto thread_mtx_on_blk = XdlopsGemm.GetBeginOfThreadBlk(j);
+        const auto thread_mtx_on_blk = XdlopsGemm.GetOutputLayout().GetBeginOfThreadBlk(j);
 
         const index_t col =
             (waveId % GemmNWaves) * GemmNPerWave + n * NPerXdlops + thread_mtx_on_blk.col;
@@ -210,7 +238,7 @@ struct BlockwiseGemmBlockABlockBThreadCTransANormalBNormalC_xdlops
         const index_t row =
             (waveId / GemmNWaves) * GemmMPerWave + m * MPerXdlops + thread_mtx_on_blk.row;
 #else
-        const auto thread_mtx_on_blk = XdlopsGemm.GetBeginOfThreadBlk(i);
+        const auto thread_mtx_on_blk = XdlopsGemm.GetOutputLayout().GetBeginOfThreadBlk(i);
 
         const index_t col = (waveId % GemmNWaves) * GemmNPerWave + thread_mtx_on_blk.col;
         const index_t row = (waveId / GemmNWaves) * GemmMPerWave + thread_mtx_on_blk.row;
