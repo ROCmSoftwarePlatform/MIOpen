@@ -1432,7 +1432,7 @@ struct ConvBinWinogradRxSFused : SolverBase<ConvolutionContext>
 };
 
 template <int WinoDataH, int WinoFilterH, int WinoDataW = WinoDataH, int WinoFilterW = WinoFilterH>
-struct ConvMPBidirectWinograd : SolverBase<ConvolutionContext>
+struct ConvMPAnydirectWinograd : SolverBase<ConvolutionContext>
 {
     bool IsApplicable(const ConvolutionContext& params) const;
     bool IsDynamic() const { return true; }
@@ -1442,9 +1442,9 @@ struct ConvMPBidirectWinograd : SolverBase<ConvolutionContext>
     // kernel_file_name for solver identification
     static std::string GetSolverFileNames(int id)
     {
-        static const std::string names[3] = {"xform_bidirect_winograd_data.s",
-                                             "xform_bidirect_winograd_filter.s",
-                                             "xform_bidirect_winograd_out.s"};
+        static const std::string names[3] = {"xform_anydirect_winograd_data.s",
+                                             "xform_anydirect_winograd_filter.s",
+                                             "xform_anydirect_winograd_out.s"};
         return names[id];
     }
 
@@ -1454,22 +1454,56 @@ struct ConvMPBidirectWinograd : SolverBase<ConvolutionContext>
             '_' + std::to_string(WinoDataH) + '_' + std::to_string(WinoDataW) + '_' +
             std::to_string(WinoFilterH) + '_' + std::to_string(WinoFilterW);
         static const std::string names[3] = {
-            "miopenGcnAsmMPBidirectWinogradXformData" + name_suffix,
-            "miopenGcnAsmMPBidirectWinogradXformFilter" + name_suffix,
-            "miopenGcnAsmMPBidirectWinogradXformOut" + name_suffix};
+            "miopenGcnAsmMPAnydirectWinogradXformData" + name_suffix,
+            "miopenGcnAsmMPAnydirectWinogradXformFilter" + name_suffix,
+            "miopenGcnAsmMPAnydirectWinogradXformOut" + name_suffix};
         return names[id];
     }
 
-    static int GetSolverWinoXformHWSize() { return WinoDataH + WinoFilterH - 1; }
+    static int GetSolverWinoXformHWSize(const ConvolutionContext& params, int id)
+    {
+        if(id == 0)
+        {
+            if(params.direction.IsForward())
+                return WinoFilterW + (WinoDataW - 1) * params.kernel_stride_w;
+            if(params.direction.IsBackwardData())
+                return WinoFilterW + WinoDataW - params.kernel_stride_w;
+            return WinoDataW + (WinoFilterW - 1) * params.kernel_stride_w;
+        }
+        else
+        {
+            if(params.direction.IsForward())
+                return WinoFilterH + (WinoDataH - 1) * params.kernel_stride_h;
+            if(params.direction.IsBackwardData())
+                return WinoFilterH + WinoDataH - params.kernel_stride_h;
+            return WinoDataH + (WinoFilterH - 1) * params.kernel_stride_h;
+        }
+    }
+
+    static int GetSolverWinoDtileHWSize(const ConvolutionContext& params, int id)
+    {
+        if(params.direction.IsBackwardData())
+        {
+            if(id == 0 && params.kernel_stride_w == 2)
+                return (WinoFilterW + WinoDataW) / params.kernel_stride_w;
+            if(id == 1 && params.kernel_stride_h == 2)
+                return (WinoFilterH + WinoDataH) / params.kernel_stride_h;
+        }
+        return GetSolverWinoXformHWSize(params, id);
+    }
 };
-extern template struct ConvMPBidirectWinograd<2, 3>;
-extern template struct ConvMPBidirectWinograd<3, 3>;
-extern template struct ConvMPBidirectWinograd<4, 3>;
-extern template struct ConvMPBidirectWinograd<5, 3>;
-extern template struct ConvMPBidirectWinograd<6, 3>;
+extern template struct ConvMPAnydirectWinograd<2, 3>;
+extern template struct ConvMPAnydirectWinograd<3, 2>;
+extern template struct ConvMPAnydirectWinograd<3, 3>;
+extern template struct ConvMPAnydirectWinograd<4, 3>;
+extern template struct ConvMPAnydirectWinograd<3, 4>;
+extern template struct ConvMPAnydirectWinograd<5, 3>;
+extern template struct ConvMPAnydirectWinograd<3, 5>;
+extern template struct ConvMPAnydirectWinograd<6, 3>;
+extern template struct ConvMPAnydirectWinograd<3, 6>;
 
 template <int WinoDataH, int WinoFilterH, int WinoDataW = WinoDataH, int WinoFilterW = WinoFilterH>
-struct ConvMPBidirectWinograd_xdlops : SolverBase<ConvolutionContext>
+struct ConvMPAnydirectWinograd_xdlops : SolverBase<ConvolutionContext>
 {
     bool IsApplicable(const ConvolutionContext& ctx) const;
 
@@ -1482,7 +1516,7 @@ struct ConvMPBidirectWinograd_xdlops : SolverBase<ConvolutionContext>
 
     size_t GetWorkspaceSize(const ConvolutionContext& ctx) const
     {
-        return ConvMPBidirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>()
+        return ConvMPAnydirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>()
                    .GetWorkspaceSize(ctx) +
                ConvHipImplicitGemmForwardV4R4Xdlops{}.GetWorkspaceSize(
                    GetTransformedConvContext(ctx));
@@ -1497,20 +1531,20 @@ struct ConvMPBidirectWinograd_xdlops : SolverBase<ConvolutionContext>
     // kernel_file_name for solver identification
     static std::string GetSolverFileNames(int id)
     {
-        return ConvMPBidirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
+        return ConvMPAnydirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
             GetSolverFileNames(id);
     }
 
     static std::string GetSolverKernelNames(int id)
     {
-        return ConvMPBidirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
+        return ConvMPAnydirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
             GetSolverKernelNames(id);
     }
 
-    static int GetSolverWinoXformHWSize()
+    static int GetSolverWinoXformHWSize(const ConvolutionContext& params, int id)
     {
-        return ConvMPBidirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
-            GetSolverWinoXformHWSize();
+        return ConvMPAnydirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>::
+            GetSolverWinoXformHWSize(params, id);
     }
 
     PerformanceImplicitGemmForwardV4R4Xdlops
@@ -1524,7 +1558,7 @@ struct ConvMPBidirectWinograd_xdlops : SolverBase<ConvolutionContext>
     bool IsDynamic() const
     {
         return ConvHipImplicitGemmForwardV4R4Xdlops{}.IsDynamic() &&
-               ConvMPBidirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>{}
+               ConvMPAnydirectWinograd<WinoDataH, WinoFilterH, WinoDataW, WinoFilterW>{}
                    .IsDynamic() &&
                IsThisSolverDynamic();
     }
@@ -1533,11 +1567,15 @@ struct ConvMPBidirectWinograd_xdlops : SolverBase<ConvolutionContext>
                                                     const AnyInvokeParams&) const;
 };
 
-extern template struct ConvMPBidirectWinograd_xdlops<2, 3>;
-extern template struct ConvMPBidirectWinograd_xdlops<3, 3>;
-extern template struct ConvMPBidirectWinograd_xdlops<4, 3>;
-extern template struct ConvMPBidirectWinograd_xdlops<5, 3>;
-extern template struct ConvMPBidirectWinograd_xdlops<6, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<2, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<3, 2>;
+extern template struct ConvMPAnydirectWinograd_xdlops<3, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<4, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<3, 4>;
+extern template struct ConvMPAnydirectWinograd_xdlops<5, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<3, 5>;
+extern template struct ConvMPAnydirectWinograd_xdlops<6, 3>;
+extern template struct ConvMPAnydirectWinograd_xdlops<3, 6>;
 
 template <int WinoDataH, int WinoFilterH, int WinoDataW = WinoDataH, int WinoFilterW = WinoFilterH>
 struct ConvWinograd3x3MultipassWrW : SolverBase<ConvolutionContext>
