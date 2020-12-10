@@ -1193,13 +1193,6 @@ struct batch_norm_3d_spatial_driver : test_driver
         std::size_t n, c, d, h, w;
         std::tie(n, c, d, h, w) = miopen::tien<5>(input.desc.GetLengths());
 
-        // The condition is derived form bn_spatial_test.cpp as they are known failures
-        if(n == 1)
-        {
-            std::cout << "(n=1) is not supported for BN operation." << std::endl;
-            return;
-        }
-
         if((h * w * d > 1024) && (input.desc.GetType() == miopenHalf) && (MIO_BN_USE_MIX_PREC == 0))
         {
             std::cout << "(h*w*d > 1024) is not supported for BN operations "
@@ -1347,7 +1340,7 @@ struct batch_norm_3d_spatial_driver : test_driver
 #if(MIO_BN_SP_TEST_DEBUG == 1)
         std::cout << "Running back propagation spatial recalc." << std::endl;
 #endif
-        this->tolerance = 80 * input.desc.GetElementSize();
+        this->tolerance = 8000 * input.desc.GetElementSize();
         verify(verify_backward_3d_bn_spatial_recalc<T, PREC_TYPE>{input, dy_input, scale});
 #endif
 
