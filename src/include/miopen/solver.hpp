@@ -1371,6 +1371,7 @@ struct ConvBinWinograd3x3U : SolverBase<ConvolutionContext>
 {
     bool IsApplicable(const ConvolutionContext& params) const;
     bool IsDynamic() const { return true; }
+    float GetWti(const ConvolutionContext& params) const;
     ConvSolution GetSolution(const ConvolutionContext& params) const;
 };
 

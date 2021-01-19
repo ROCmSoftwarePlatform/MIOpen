@@ -49,6 +49,7 @@
 #include <miopen/conv/compiled_in_parameters.hpp>
 #include <miopen/conv/data_invoke_params.hpp>
 #include <miopen/conv/wrw_invoke_params.hpp>
+#include <miopen/conv/heur/heur.hpp>
 
 #if MIOPEN_USE_GEMM
 #include <miopen/gemm_v2.hpp>
@@ -1700,7 +1701,6 @@ float ConvolutionDescriptor::ComputeGemmWtiWrw(const TensorDescriptor& dyDesc,
     wti *= SlowdownFactor(n_Im2ColGPU, 0.4, 0.8);
     return wti;
 }
-
 void ConvolutionDescriptor::GetSolutionsFallback(Handle& handle,
                                                  const ProblemDescription& problem,
                                                  const size_t maxSolutionCount,
@@ -1731,7 +1731,64 @@ void ConvolutionDescriptor::GetSolutionsFallback(Handle& handle,
     auto ctx = ConvolutionContext{problem};
     ctx.SetStream(&handle);
     ctx.DetectRocm();
-
+#if MIOPEN_ENABLE_HEUR
+    int idx = 1; // Each solution to have a successively more negative values keeping 
+    // sorting logic intact in frameworks
+    auto solvers = ConvHeur{}.Estimate(handle, problem);
+    for(const auto kinder : solvers)
+    {
+        const auto solver_id = solver::Id{kinder};
+        if(solver_id == solver::Id::gemm())
+        {
+            size_t ws_sz = 0;
+            if(problem.direction.IsForward() && (IsGemmApplicableFwd(weightsDesc, inDesc, outDesc)))
+            {
+                ws_sz = ForwardGetValidWorkSpaceSizeGemm(handle, weightsDesc, inDesc, outDesc);
+            }
+            else if(problem.direction.IsBackwardData() && IsGemmApplicableBwd(outDesc, weightsDesc, inDesc))
+            {
+                ws_sz = BackwardGetValidWorkSpaceSizeGemm(outDesc, weightsDesc, inDesc);
+            }
+            else if(problem.direction.IsBackwardWrW() && IsGemmApplicableWrw(outDesc, inDesc, weightsDesc))
+            {
+                ws_sz = WrwGetValidWorkSpaceSizeGemm(outDesc, inDesc, weightsDesc);
+            }
+            else
+                continue; // Its not applicable
+            interim.emplace_back(static_cast<float>(-1 * idx), ws_sz, solver::Id::gemm().Value(), miopenConvolutionAlgoGEMM);
+        }
+        else
+        {
+            const auto sol = solver_id.GetSolver();
+            if(!sol.IsDynamic())
+                continue; // branch should never be taken
+            if(!sol.IsApplicable(ctx))
+                continue;
+            const auto algo = solver_id.GetAlgo();
+            if(IsAlgorithmDisabled(algo))
+                continue;
+            interim.emplace_back(static_cast<float>(-1 * idx), sol.GetWorkspaceSize(ctx), solver_id.Value(), algo);
+        }
+        ++idx;
+    }
+    auto i = std::size_t{0};
+    MIOPEN_LOG_I2("maxSolutionCount = " << maxSolutionCount << ", available = " << interim.size());
+    for(const auto& s : interim)
+        MIOPEN_LOG_I2("id: " << s.solution_id << " algo: " << s.algorithm << ", time: " << s.time
+                             << " ms, ws: "
+                             << s.workspace_size
+                             << ", name: "
+                             << miopen::solver::Id(s.solution_id).ToString());
+    for(const auto& entry : interim)
+    {
+        if(i >= maxSolutionCount)
+            break;
+        if(solutions != nullptr)
+            solutions[i] = entry;
+        ++i;
+    }
+    *solutionCount = i;
+#else
     const auto wti2time = [](const float& wti) {
         assert(wti != 0.0f);
         if(wti <= 0.0f) // Return negative values as is, avoid DIV/0.
@@ -1825,6 +1882,7 @@ void ConvolutionDescriptor::GetSolutionsFallback(Handle& handle,
         ++i;
     }
     *solutionCount = i;
+#endif
 }
 
 void GetSolutions(Handle& handle,
