@@ -125,7 +125,7 @@ KDb GetDb(const TargetProperties& target, size_t num_cu)
         user_path = user_dir;
     if(!boost::filesystem::exists(sys_path))
         sys_path = boost::filesystem::path{};
-    return {sys_path.string(), user_path.string(), target.DbId(), num_cu};
+    return {sys_path.string(), user_path.string()};
 }
 #endif
 
