@@ -126,6 +126,7 @@ set( MIOpen_Source
     execution_context.cpp
     reducetensor.cpp
     reducetensor_api.cpp
+    idiv.cpp
     include/miopen/buffer_info.hpp
     include/miopen/temp_file.hpp
     include/miopen/bfloat16.hpp
@@ -139,6 +140,7 @@ set( MIOpen_Source
     include/miopen/convolution.hpp
     include/miopen/convolution_fft.hpp
     include/miopen/errors.hpp
+    include/miopen/idiv.hpp
     include/miopen/invoker.hpp
     include/miopen/handle.hpp
     include/miopen/target_properties.hpp
@@ -242,6 +244,7 @@ set( MIOpen_Source
     solver/conv_direct_naive_conv_bwd.cpp
     solver/conv_direct_naive_conv_wrw.cpp
     solver/conv_direct_naive_conv.cpp
+    solver/conv_cellfft.cpp
     )
 
 list(APPEND MIOpen_Source tmp_dir.cpp binary_cache.cpp md5.cpp)
@@ -430,6 +433,8 @@ if( MIOPEN_BACKEND MATCHES "OpenCL" OR MIOPEN_BACKEND STREQUAL "HIPOC" OR MIOPEN
         kernels/MIOpenDropout.cl
         kernels/xform_data.s
         kernels/xform_filter.s
+        kernels/cellfft_gfx900.s
+        kernels/cellfft_gfx906.s
         kernels/xform_bidirect_winograd_data.s
         kernels/xform_bidirect_winograd_filter.s
         kernels/xform_bidirect_winograd_out.s)

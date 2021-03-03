@@ -496,6 +496,7 @@ std::size_t ConvolutionDescriptor::ForwardGetWorkSpaceSize(Handle& handle,
     const size_t workspace_size_winograd = ForwardBackwardDataGetWorkSpaceSizeWinograd(ctx);
     const size_t direct_workspace        = ForwardBackwardDataGetWorkSpaceSizeDirect(ctx);
     const size_t implicit_gemm_workspace = ForwardBackwardGetWorkSpaceSizeImplicitGemm(ctx);
+    const size_t workspace_size_fft      = ForwardBackwardDataGetWorkSpaceSizeFFT(ctx);
 
     size_t workspace_size_gemm = 0;
 #if MIOPEN_USE_GEMM
@@ -524,15 +525,14 @@ std::size_t ConvolutionDescriptor::ForwardGetWorkSpaceSize(Handle& handle,
 
         if(miopen::any_of(GetConvDilations(), [](auto v) { return v > 1; }))
         {
-            return std::max({workspace_size_gemm,
+            return std::max({workspace_size_fft,
+                             workspace_size_gemm,
                              direct_workspace,
                              implicit_gemm_workspace,
                              workspace_size_winograd});
         }
     }
 #endif
-
-    const size_t workspace_size_fft = ForwardBackwardDataGetWorkSpaceSizeFFT(ctx);
 
     const size_t workspace_size = std::max({workspace_size_fft,
                                             workspace_size_gemm,
@@ -588,12 +588,13 @@ ConvolutionDescriptor::BackwardDataGetWorkSpaceSize(Handle& handle,
     const size_t workspace_size_winograd = ForwardBackwardDataGetWorkSpaceSizeWinograd(ctx);
     const size_t direct_workspace        = ForwardBackwardDataGetWorkSpaceSizeDirect(ctx);
     const size_t implicit_gemm_workspace = ForwardBackwardGetWorkSpaceSizeImplicitGemm(ctx);
+    const size_t workspace_size_fft      = ForwardBackwardDataGetWorkSpaceSizeFFT(ctx);
 
     size_t workspace_size_gemm = 0;
 
 #if MIOPEN_USE_GEMM
-    size_t tmp_max_workspace =
-        std::max({direct_workspace, implicit_gemm_workspace, workspace_size_winograd});
+    size_t tmp_max_workspace = std::max(
+        {direct_workspace, implicit_gemm_workspace, workspace_size_winograd, workspace_size_fft});
     if(!miopen::IsDisabled(MIOPEN_DEBUG_CONV_GEMM{}))
     {
         workspace_size_gemm = BackwardDataGetWorkSpaceSizeGEMM(wDesc, dyDesc);
@@ -622,8 +623,6 @@ ConvolutionDescriptor::BackwardDataGetWorkSpaceSize(Handle& handle,
         }
     }
 #endif
-
-    const size_t workspace_size_fft = ForwardBackwardDataGetWorkSpaceSizeFFT(ctx);
 
     const size_t workspace_size = std::max({workspace_size_fft,
                                             workspace_size_gemm,
@@ -915,6 +914,35 @@ std::size_t ConvolutionDescriptor::BackwardWeightsGetWorkSpaceSizeImplicitGemm(
     }
 }
 
+std::size_t ConvolutionDescriptor::BackwardWeightsGetWorkSpaceSizeFFT(
+    const miopen::ConvolutionContext& ctx) const
+{
+    if(miopen::IsDisabled(MIOPEN_DEBUG_CONV_FFT{}))
+        return 0;
+
+    try
+    {
+        if(ctx.do_search)
+            MIOPEN_THROW("Auto-tune is not supported in the get workspace size");
+        const auto ss  = FindFFTWrWAllSolutions(ctx, {});
+        std::size_t sz = 0;
+        for(const auto& solution : ss)
+        {
+            if(sz < solution.workspce_sz)
+            {
+                MIOPEN_LOG_I2(sz << " < " << solution.workspce_sz);
+                sz = solution.workspce_sz;
+            }
+        }
+        return sz;
+    }
+    catch(const miopen::Exception& ex)
+    {
+        MIOPEN_LOG_WE(ex.what());
+        return 0;
+    }
+}
+
 std::size_t
 ConvolutionDescriptor::BackwardWeightsGetWorkSpaceSize(Handle& handle,
                                                        const TensorDescriptor& dyDesc,
@@ -960,6 +988,7 @@ ConvolutionDescriptor::BackwardWeightsGetWorkSpaceSize(Handle& handle,
     const size_t workspace_size = std::max({BackwardWeightsGetWorkSpaceSizeImplicitGemm(ctx),
                                             BackwardWeightsGetWorkSpaceSizeWinograd(ctx),
                                             BackwardWeightsGetWorkSpaceSizeDirect(ctx),
+                                            BackwardWeightsGetWorkSpaceSizeFFT(ctx),
                                             workspace_size_gemm});
     MIOPEN_LOG_I2(workspace_size);
     return workspace_size;

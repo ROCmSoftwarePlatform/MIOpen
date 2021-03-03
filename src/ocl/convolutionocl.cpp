@@ -3202,6 +3202,14 @@ void ConvolutionDescriptor::FindConvBwdWeightsAlgorithm(Handle& handle,
                     AlgorithmName{"miopenConvolutionBwdWeightsAlgoImplicitGEMM"};
                 EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
             }
+
+            // fft
+            if(!miopen::IsDisabled(MIOPEN_DEBUG_CONV_FFT{}))
+            {
+                const auto all            = FindFFTWrWAllSolutions(ctx, invoke_ctx);
+                const auto algorithm_name = AlgorithmName{"miopenConvolutionBwdWeightsAlgoFFT"};
+                EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
+            }
         });
     }
 

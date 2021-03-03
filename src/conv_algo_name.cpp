@@ -64,6 +64,7 @@ miopenConvBwdWeightsAlgorithm_t StringToConvolutionBwdWeightsAlgo(const std::str
         {"miopenConvolutionBwdWeightsAlgoWinograd", miopenConvolutionBwdWeightsAlgoWinograd},
         {"miopenConvolutionBwdWeightsAlgoImplicitGEMM",
          miopenConvolutionBwdWeightsAlgoImplicitGEMM},
+        {"miopenConvolutionBwdWeightsAlgoFFT", miopenConvolutionBwdWeightsAlgoFFT},
     };
     return data.at(s);
 }
