@@ -191,7 +191,8 @@ std::string AmdgcnAssemble(const std::string& source, const std::string& params)
         options << " -mno-xnack";
 #endif
     /// \todo Hacky way to find out which CO version we need to assemble for.
-    if(params.find("ROCM_METADATA_VERSION=5", 0) == std::string::npos) // Assume that !COv3 == COv2.
+    if(params.find("ROCM_METADATA_VERSION=5", 0) == std::string::npos &&
+       params.find("ROCM_METADATA_VERSION=6", 0) == std::string::npos) // Assume that !COv3 == COv2.
         if(GcnAssemblerSupportsNoCOv3()) // If assembling for COv2, then disable COv3.
             options << ' ' << option_no_co_v3;
 

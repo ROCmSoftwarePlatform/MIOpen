@@ -180,7 +180,7 @@ bool ConvAsm3x3U::IsApplicable(const ConvolutionContext& params) const
         return false;
     if(!(params.direction.IsForward() || params.direction.IsBackwardData()))
         return false;
-    if(!params.rmv.IsV2orV3())
+    if(!(params.rmv.IsV2orV3() || params.rmv.IsV4()))
         return false;
     const std::string name = params.GetStream().GetDeviceName();
     if(!(StartsWith(name, "gfx8") || StartsWith(name, "gfx9")))
@@ -274,7 +274,9 @@ ConvSolution ConvAsm3x3U::GetSolution(const ConvolutionContext& params,
         {"output_channels", params.n_outputs},
         {"weights_layout", params.direction.IsForward() ? 0 : 1},
         {"reverse_weights", params.direction.IsForward() ? 0 : 1},
-        {"ROCM_METADATA_VERSION", params.rmv.UseV3() ? 5 : 4},
+        {"ROCM_METADATA_VERSION", params.rmv.IsV4() ? 6 : (params.rmv.UseV3() ? 5 : 4)},
+        {"amd_target_feature_xnack", 0},
+        {"amd_target_feature_sramecc", 0},
         {"limit_wave_cnt", pcfg->limit_wave_cnt},
         {"filters_per_wave", pcfg->filters_per_wave},
         {"output_lines_per_wave", pcfg->output_lines_per_wave},
