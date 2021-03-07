@@ -611,7 +611,6 @@ ConvSolution ConvAsm1x1U::GetSolution(const ConvolutionContext& params,
         }
     };
 
-    // cppcheck-suppress unreadVariable
     buff_info ibuf(MemLayout::NCHW,
                    params.batch_sz,
                    params.n_inputs,
@@ -619,7 +618,6 @@ ConvSolution ConvAsm1x1U::GetSolution(const ConvolutionContext& params,
                    AsmImgWidth(params),
                    1,
                    data_len);
-    // cppcheck-suppress unreadVariable
     buff_info obuf(MemLayout::NCHW,
                    params.batch_sz,
                    params.n_outputs,
@@ -627,7 +625,6 @@ ConvSolution ConvAsm1x1U::GetSolution(const ConvolutionContext& params,
                    AsmImgWidth(params),
                    1,
                    data_len);
-    // cppcheck-suppress unreadVariable
     buff_info fbuf(params.direction.IsForward() ? MemLayout::NCHW : MemLayout::CNHW,
                    params.n_outputs,
                    params.n_inputs,

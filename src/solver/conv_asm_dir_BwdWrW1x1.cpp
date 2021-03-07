@@ -678,7 +678,6 @@ ConvSolution ConvAsmBwdWrW1x1::GetSolution(const ConvolutionContext& params,
         }
     };
 
-    // cppcheck-suppress unreadVariable
     buff_info ibuf(MemLayout::NCHW,
                    params.batch_sz,
                    params.n_outputs,
@@ -686,7 +685,6 @@ ConvSolution ConvAsmBwdWrW1x1::GetSolution(const ConvolutionContext& params,
                    AsmImgWidth(params),
                    1,
                    data_len);
-    // cppcheck-suppress unreadVariable
     buff_info obuf(MemLayout::NCHW,
                    params.batch_sz,
                    params.n_inputs,
@@ -694,7 +692,6 @@ ConvSolution ConvAsmBwdWrW1x1::GetSolution(const ConvolutionContext& params,
                    AsmImgWidth(params),
                    1,
                    data_len);
-    // cppcheck-suppress unreadVariable
     buff_info fbuf(MemLayout::NCHW, params.n_inputs, params.n_outputs, 1, 1, 1, data_len);
     GenerateClangDefsym(options, "input_n_stride", ibuf.byte_stride.nk);
     GenerateClangDefsym(options, "input_c_stride", ibuf.byte_stride.c);

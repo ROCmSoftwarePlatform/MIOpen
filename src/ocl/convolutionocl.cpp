@@ -701,28 +701,28 @@ static void DirConvFindCore(Handle& handle,
         EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
     }
 
-    // Direct algo
     if(!use_winograd_only)
     {
-        ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
-        bufs.SetFwd(x, w, y);
-        const auto all = conv.FindDataDirectSolutions(
-            handle, xDesc, wDesc, yDesc, exhaustiveSearch, true, bufs, invoke_ctx);
-        PrecompileSolutions(handle, all);
-        const auto algorithm_name = AlgorithmName{"miopenConvolutionFwdAlgoDirect"};
-        EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
-    }
-
-    // Implicit GEMM algo
-    if(!use_winograd_only)
-    {
-        ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
-        bufs.SetFwd(x, w, y);
-        const auto all = conv.FindDataImplicitGemmSolutions(
-            handle, xDesc, wDesc, yDesc, exhaustiveSearch, true, bufs, invoke_ctx);
-        PrecompileSolutions(handle, all);
-        const auto algorithm_name = AlgorithmName{"miopenConvolutionFwdAlgoImplicitGEMM"};
-        EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
+        // Direct algo
+        {
+            ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
+            bufs.SetFwd(x, w, y);
+            const auto all = conv.FindDataDirectSolutions(
+                handle, xDesc, wDesc, yDesc, exhaustiveSearch, true, bufs, invoke_ctx);
+            PrecompileSolutions(handle, all);
+            const auto algorithm_name = AlgorithmName{"miopenConvolutionFwdAlgoDirect"};
+            EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
+        }
+        // Implicit GEMM algo
+        {
+            ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
+            bufs.SetFwd(x, w, y);
+            const auto all = conv.FindDataImplicitGemmSolutions(
+                handle, xDesc, wDesc, yDesc, exhaustiveSearch, true, bufs, invoke_ctx);
+            PrecompileSolutions(handle, all);
+            const auto algorithm_name = AlgorithmName{"miopenConvolutionFwdAlgoImplicitGEMM"};
+            EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
+        }
     }
 
     // FFT algo
@@ -1440,6 +1440,7 @@ bool ConvolutionDescriptor::IsGemmApplicableBwd(const TensorDescriptor& dyDesc,
 #endif
 }
 
+// cppcheck-suppress constParameter
 static std::size_t GetSolutionCount(Handle& handle, const ProblemDescription& problem)
 {
     const FindDbRecord fdb_record{handle, problem};
@@ -2200,26 +2201,28 @@ void ConvolutionDescriptor::FindConvBwdDataAlgorithm(Handle& handle,
             // Direct algo
             if(!use_winograd_only)
             {
-                ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
-                bufs.SetBwd(dx, w, dy);
-                const auto all = FindDataDirectSolutions(
-                    handle, dxDesc, wDesc, dyDesc, exhaustiveSearch, false, bufs, invoke_ctx);
-                const auto algorithm_name = AlgorithmName{"miopenConvolutionBwdDataAlgoDirect"};
-                PrecompileSolutions(handle, all);
-                EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
-            }
-
-            // Implicit GEMM algo
-            if(!use_winograd_only)
-            {
-                ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
-                bufs.SetBwd(dx, w, dy);
-                const auto all = this->FindDataImplicitGemmSolutions(
-                    handle, dxDesc, wDesc, dyDesc, exhaustiveSearch, false, bufs, invoke_ctx);
-                PrecompileSolutions(handle, all);
-                const auto algorithm_name =
-                    AlgorithmName{"miopenConvolutionBwdDataAlgoImplicitGEMM"};
-                EvaluateInvokers(handle, all, algorithm_name, network_config, invoke_ctx, record);
+                {
+                    ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
+                    bufs.SetBwd(dx, w, dy);
+                    const auto all = FindDataDirectSolutions(
+                        handle, dxDesc, wDesc, dyDesc, exhaustiveSearch, false, bufs, invoke_ctx);
+                    const auto algorithm_name = AlgorithmName{"miopenConvolutionBwdDataAlgoDirect"};
+                    PrecompileSolutions(handle, all);
+                    EvaluateInvokers(
+                        handle, all, algorithm_name, network_config, invoke_ctx, record);
+                }
+                // Implicit GEMM algo
+                {
+                    ConvolutionUserBuffers bufs(workSpace, workSpaceSize);
+                    bufs.SetBwd(dx, w, dy);
+                    const auto all = this->FindDataImplicitGemmSolutions(
+                        handle, dxDesc, wDesc, dyDesc, exhaustiveSearch, false, bufs, invoke_ctx);
+                    PrecompileSolutions(handle, all);
+                    const auto algorithm_name =
+                        AlgorithmName{"miopenConvolutionBwdDataAlgoImplicitGEMM"};
+                    EvaluateInvokers(
+                        handle, all, algorithm_name, network_config, invoke_ctx, record);
+                }
             }
 
             if(!use_winograd_only)
@@ -3314,7 +3317,7 @@ void ConvolutionDescriptor::ConvolutionBackwardWeights(Handle& handle,
     });
 }
 
-void ConvolutionDescriptor::BackwardWeightsGemm(Handle& handle,
+void ConvolutionDescriptor::BackwardWeightsGemm(const Handle& handle,
                                                 const ConvWrwTensors& tensors,
                                                 Data_t workSpace,
                                                 std::size_t workSpaceSize) const

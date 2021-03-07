@@ -646,7 +646,6 @@ ConvBinWinogradRxSf2x3::GetSolution(const ConvolutionContext& params,
         int flags            = is_forward ? 0 : F_REVERSE_R + F_REVERSE_S + F_FLIP_K_C;
         flags |= L_F_NKC_STRIDES + L_F_GROUP_STRIDES;
 
-        // cppcheck-suppress unreadVariable
         BuffInfo d_buf(GetGroupConvLayout(GetMemLayout_t(params.in_layout), true),
                        N,
                        C,
@@ -654,7 +653,6 @@ ConvBinWinogradRxSf2x3::GetSolution(const ConvolutionContext& params,
                        W,
                        group_cnt,
                        GetTypeSize(params.in_data_type)),
-            // cppcheck-suppress unreadVariable
             o_buf(GetGroupConvLayout(GetMemLayout_t(params.out_layout), true),
                   N,
                   K,
@@ -662,7 +660,6 @@ ConvBinWinogradRxSf2x3::GetSolution(const ConvolutionContext& params,
                   out_W,
                   group_cnt,
                   GetTypeSize(params.out_data_type)),
-            // cppcheck-suppress unreadVariable
             f_buf(GetGroupConvLayout(is_forward ? (MemLayout_t::NCHW)
                                                 : GetSwappedNCLayout(MemLayout_t::NCHW),
                                      false),
