@@ -44,8 +44,15 @@ class path;
 
 namespace miopen {
 
-struct RecordPositions;
+struct RecordPositions
+{
+    std::streamoff begin = -1;
+    std::streamoff end   = -1;
+};
+
 class LockFile;
+
+constexpr bool DisableUserDbFileIO = MIOPEN_DISABLE_USERDB;
 
 /// No instance of this class should be used from several threads at the same time.
 class PlainTextDb
@@ -141,16 +148,21 @@ class PlainTextDb
         return record->GetValues(id, values);
     }
 
-    private:
-    std::string filename;
-    LockFile& lock_file;
-    const bool warn_if_unreadable;
-
+    protected:
+    LockFile& GetLockFile() { return lock_file; }
+    const std::string& GetFileName() const { return filename; }
+    bool IsWarningIfUnreadable() const { return warning_if_unreadable; }
     boost::optional<DbRecord> FindRecordUnsafe(const std::string& key, RecordPositions* pos);
-    bool FlushUnsafe(const DbRecord& record, const RecordPositions* pos);
     bool StoreRecordUnsafe(const DbRecord& record);
     bool UpdateRecordUnsafe(DbRecord& record);
     bool RemoveRecordUnsafe(const std::string& key);
+
+    private:
+    std::string filename;
+    LockFile& lock_file;
+    const bool warning_if_unreadable;
+
+    bool FlushUnsafe(const DbRecord& record, const RecordPositions* pos);
 
     template <class T>
     inline boost::optional<DbRecord> FindRecordUnsafe(const T& problem_config)
@@ -160,15 +172,23 @@ class PlainTextDb
     }
 };
 
-#if MIOPEN_DISABLE_USERDB
-struct sink
+template <class TDb, class TRet = decltype(TDb::GetCached("", true))>
+TRet GetDbInstance(rank<1>, const std::string& path, bool is_system)
 {
-    template <typename... Args>
-    sink(Args const&...)
-    {
-    }
+    return TDb::GetCached(path, is_system);
 };
-#endif
+
+template <class TDb>
+TDb GetDbInstance(rank<0>, const std::string& path, bool is_system)
+{
+    return {path, is_system};
+};
+
+template <class TDb, class TRet = decltype(GetDbInstance<TDb>(rank<1>{}, {}, {}))>
+TRet GetDbInstance(const std::string& path, bool is_system = true)
+{
+    return GetDbInstance<TDb>(rank<1>{}, path, is_system);
+}
 
 template <class TInstalled, class TUser, bool merge_records>
 class MultiFileDb
@@ -178,26 +198,17 @@ class MultiFileDb
                 const std::string& user_path,
                 const std::string& arch  = "",
                 const std::size_t num_cu = 0)
-        : _installed(GetDbInstance<TInstalled>(installed_path, true, arch, num_cu))
-#if !MIOPEN_DISABLE_USERDB
-          ,
+        : _installed(GetDbInstance<TInstalled>(installed_path, true, arch, num_cu)),
           _user(GetDbInstance<TUser>(user_path, false, arch, num_cu))
-#endif
     {
-#if MIOPEN_DISABLE_USERDB
-        (void)(user_path);
-#endif
     }
 
     template <bool merge = merge_records, std::enable_if_t<merge>* = nullptr, typename... U>
     auto FindRecord(const U&... args)
     {
-#if !MIOPEN_DISABLE_USERDB
-        auto users = _user.FindRecord(args...);
-#endif
+        auto users     = _user.FindRecord(args...);
         auto installed = _installed.FindRecord(args...);
 
-#if !MIOPEN_DISABLE_USERDB
         if(users && installed)
         {
             users->Merge(installed.value());
@@ -206,7 +217,6 @@ class MultiFileDb
 
         if(users)
             return users;
-#endif
 
         return installed;
     }
@@ -214,113 +224,80 @@ class MultiFileDb
     template <bool merge = merge_records, std::enable_if_t<!merge>* = nullptr, typename... U>
     auto FindRecord(const U&... args)
     {
-#if !MIOPEN_DISABLE_USERDB
         auto users = _user.FindRecord(args...);
         return users ? users : _installed.FindRecord(args...);
-#else
-        return _installed.FindRecord(args...);
-#endif
     }
 
     template <typename... U>
     auto StoreRecord(const U&... args)
     {
-#if MIOPEN_DISABLE_USERDB
-        sink{args...};
-        return true;
-#else
         return _user.StoreRecord(args...);
-#endif
     }
 
     template <typename... U>
     auto UpdateRecord(U&... args)
     {
-#if MIOPEN_DISABLE_USERDB
-        sink{args...};
-        return true;
-#else
         return _user.UpdateRecord(args...);
-#endif
     }
 
     template <typename... U>
     auto RemoveRecord(const U&... args)
     {
-#if MIOPEN_DISABLE_USERDB
-        sink{args...};
-        return true;
-#else
         return _user.RemoveRecord(args...);
-#endif
     }
 
     template <typename... U>
     auto Update(const U&... args)
     {
-#if MIOPEN_DISABLE_USERDB
-        sink{args...};
-        return true;
-#else
         return _user.Update(args...);
-#endif
     }
 
     template <typename... U>
     auto Load(U&... args)
     {
-#if !MIOPEN_DISABLE_USERDB
         if(_user.Load(args...))
             return true;
-#endif
         return _installed.Load(args...);
     }
 
     template <typename... U>
     auto Remove(const U&... args)
     {
-#if MIOPEN_DISABLE_USERDB
-        sink{args...};
-        return true;
-#else
         return _user.Remove(args...);
-#endif
     }
 
     private:
     template <class TDb, class TRet = decltype(TDb::GetCached("", true, "", 0))>
     static TRet GetDbInstance(rank<1>,
                               const std::string& path,
-                              bool warn_if_unreadable,
+                              bool is_system,
                               const std::string& arch,
                               std::size_t num_cu)
     {
-        return TDb::GetCached(path, warn_if_unreadable, arch, num_cu);
+        return TDb::GetCached(path, is_system, arch, num_cu);
     };
 
     template <class TDb>
     static TDb GetDbInstance(rank<0>,
                              const std::string& path,
-                             bool warn_if_unreadable,
+                             bool is_system,
                              const std::string& arch,
                              std::size_t num_cu)
     {
-        return {path, warn_if_unreadable, arch, num_cu};
+        return {path, is_system, arch, num_cu};
     };
 
     template <class TDb, class TRet = decltype(GetDbInstance<TDb>(rank<1>{}, {}, {}, {}, {}))>
     static TRet GetDbInstance(const std::string& path,
-                              bool warn_if_unreadable,
+                              bool is_system,
                               const std::string& arch,
                               const std::size_t num_cu)
     {
-        return GetDbInstance<TDb>(rank<1>{}, path, warn_if_unreadable, arch, num_cu);
+        return GetDbInstance<TDb>(rank<1>{}, path, is_system, arch, num_cu);
     }
 
     decltype(MultiFileDb::GetDbInstance<TInstalled>("", true, "", 0)) _installed;
-#if !MIOPEN_DISABLE_USERDB
     decltype(MultiFileDb::GetDbInstance<TUser>("", false, "", 0)) _user;
-#endif
 };
 
 template <class TInnerDb>
