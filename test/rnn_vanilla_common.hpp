@@ -1436,13 +1436,13 @@ struct verify_forward_infer_rnn
 
         auto workSpace_dev = handle.Write(workSpace);
 
-        std::vector<int> hlens(3, 0);
+        std::vector<size_t> hlens(3, 0);
         hlens[0] = nLayers * ((dirMode != 0) ? 2 : 1);
         hlens[1] = batch_seq[0];
         hlens[2] = hiddenSize;
         miopen::TensorDescriptor hiddenDesc(miopen::deref(rnnDesc).dataType, hlens.data(), 3);
 
-        std::vector<int> wlen(1, 0);
+        std::vector<size_t> wlen(1, 0);
         wlen[0] = weights.size();
         miopen::TensorDescriptor weightDesc(miopen::deref(rnnDesc).dataType, wlen.data(), 1);
 
@@ -1713,13 +1713,13 @@ struct verify_forward_train_rnn
         auto workSpace_dev    = handle.Write(workSpace);
         auto reserveSpace_dev = handle.Write(reserveSpace);
 
-        std::vector<int> hlens(3, 0);
+        std::vector<size_t> hlens(3, 0);
         hlens[0] = nLayers * ((dirMode != 0) ? 2 : 1);
         hlens[1] = batch_seq[0];
         hlens[2] = hiddenSize;
         miopen::TensorDescriptor hiddenDesc(miopen::deref(rnnDesc).dataType, hlens.data(), 3);
 
-        std::vector<int> wlen(1, 0);
+        std::vector<size_t> wlen(1, 0);
         wlen[0] = weights.size();
         miopen::TensorDescriptor weightDesc(miopen::deref(rnnDesc).dataType, wlen.data(), 1);
 
@@ -1997,13 +1997,13 @@ struct verify_backward_data_rnn
         auto weights_dev      = handle.Write(weights);
         // auto hx_dev           = handle.Write(initHidden);
 
-        std::vector<int> hlens(3, 0);
+        std::vector<size_t> hlens(3, 0);
         hlens[0] = nLayers * ((dirMode != 0) ? 2 : 1);
         hlens[1] = batch_seq[0];
         hlens[2] = hiddenSize;
         miopen::TensorDescriptor hiddenDesc(miopen::deref(rnnDesc).dataType, hlens.data(), 3);
 
-        std::vector<int> wlen(1, 0);
+        std::vector<size_t> wlen(1, 0);
         wlen[0] = weights.size();
         miopen::TensorDescriptor weightDesc(miopen::deref(rnnDesc).dataType, wlen.data(), 1);
 
@@ -2244,10 +2244,11 @@ struct verify_backward_weights_rnn
         auto workSpace_dev    = handle.Write(workSpace);
         auto reserveSpace_dev = handle.Write(reserveSpace);
         std::vector<T> dweights(weightSize);
-        auto dweights_dev = handle.Write(dweights);
-        miopen::TensorDescriptor weightDesc(miopen::deref(rnnDesc).dataType, &weightSize, 1);
+        auto dweights_dev  = handle.Write(dweights);
+        size_t weightSize_ = static_cast<size_t>(weightSize);
+        miopen::TensorDescriptor weightDesc(miopen::deref(rnnDesc).dataType, &weightSize_, 1);
 
-        std::vector<int> hlens(3, 0);
+        std::vector<size_t> hlens(3, 0);
         hlens[0] = nLayers * ((dirMode != 0) ? 2 : 1);
         hlens[1] = batch_seq[0];
         hlens[2] = hiddenSize;
@@ -2466,7 +2467,7 @@ struct rnn_basic_vanilla_driver : test_driver
             dhyin.resize(hx_sz);
 
         size_t wei_bytes = 0;
-        std::vector<int> inlens(2, 0);
+        std::vector<size_t> inlens(2, 0);
         inlens.at(0) = batchSeq.at(0);
         inlens.at(1) = inVecReal;
         auto firstInputDesc =
