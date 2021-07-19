@@ -41,6 +41,17 @@ std::string InsertGToLayout(const std::string& layout, char dim)
     return layout_with_g.insert(index, 1, 'G');
 }
 
+static std::string GetIsaName(const miopen::TargetProperties& target)
+{
+#if ROCM_FEATURE_TARGETID_OFF
+    const char* const ecc_suffix = (target.Sramecc() && *target.Sramecc()) ? ":sramecc+" : "";
+    return {"amdgcn-amd-amdhsa:" + target.Name() + ecc_suffix};
+#else
+    const LcOptionTargetStrings lots(target);
+    return "amdgcn-amd-amdhsa:" + lots.targetId;
+#endif
+}
+
 std::string ConstructBuildOptions(const ConvolutionContext& ctx,
                                   const std::string& operation,
                                   const std::string& kernel_name,
@@ -65,7 +76,7 @@ std::string ConstructBuildOptions(const ConvolutionContext& ctx,
         std::string(" --operation ") + operation +
         std::string(" --kernel_id ") + std::to_string(kernel_id) +
         std::string(" --num_cu ") + std::to_string(ctx.GetStream().GetMaxComputeUnits()) +
-        std::string(" --arch ") + ctx.GetStream().GetDeviceName() +
+        std::string(" --arch ") + GetIsaName(ctx.GetStream().GetTargetProperties()) +
         std::string(" --groupsize ") + std::to_string(CI::GetGroupCountG(ctx)) +
         std::string(" --fil_layout ") + fil_layout +
         std::string(" --fil_type ") + data_type +
