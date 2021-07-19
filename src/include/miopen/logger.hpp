@@ -292,6 +292,21 @@ std::ostream& LogParam(std::ostream& os, std::string name, const std::vector<T>&
             std::cerr << miopen_log_func_ss.str();                                      \
         }                                                                               \
     while(false)
+
+#define MIOPEN_LOG_FUNCTION_LL5(...)                                                    \
+    do                                                                                  \
+        if(miopen::IsLogging(miopen::LoggingLevel::Info, true))                         \
+        {                                                                               \
+            std::ostringstream miopen_log_func_ss;                                      \
+            miopen_log_func_ss << miopen::LoggingPrefix() << __PRETTY_FUNCTION__ << "{" \
+                               << std::endl;                                            \
+            std::cerr << miopen_log_func_ss.str();                                      \
+            MIOPEN_PP_EACH_ARGS(MIOPEN_LOG_FUNCTION_EACH, __VA_ARGS__)                  \
+            std::ostringstream().swap(miopen_log_func_ss);                              \
+            miopen_log_func_ss << miopen::LoggingPrefix() << "}" << std::endl;          \
+            std::cerr << miopen_log_func_ss.str();                                      \
+        }                                                                               \
+    while(false)
 #else
 #define MIOPEN_LOG_FUNCTION(...)
 #endif
